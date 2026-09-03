@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VivieBayb Heart Goal</title>
+<style>
+html,body{
+  margin:0;width:100%;height:100%;overflow:hidden;background:transparent;
+  font-family:Arial,Helvetica,sans-serif
+}
+body{display:flex;align-items:center;justify-content:center}
+.wrap{
+  position:relative;
+  display:inline-flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:16px 20px;
+  background:transparent;
+  filter:drop-shadow(0 4px 7px rgba(0,0,0,.75));
+}
+.title{
+  font-size:34px;
+  line-height:1;
+  font-weight:1000;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  color:#f5dcff;
+  -webkit-text-stroke:2px #7b169e;
+  text-shadow:
+    0 3px 0 #4a0865,
+    0 0 10px #cf5cff,
+    0 0 20px rgba(202,78,255,.7);
+  margin:0 0 14px;
+  white-space:nowrap;
+}
+.row{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  white-space:nowrap;
+}
+.heart{
+  display:inline-block;
+  font-size:30px;
+  line-height:1;
+  transform-origin:center;
+}
+.empty{
+  color:white;
+  text-shadow:0 0 5px #fff,0 0 9px #b026ff;
+}
+.filled{
+  color:#c63cff;
+  text-shadow:0 0 5px #fff,0 0 9px #df67ff,0 0 15px #9d14d4;
+}
+.pop{animation:pop .55s ease both}
+@keyframes pop{
+  0%{transform:scale(.3) rotate(-12deg)}
+  60%{transform:scale(1.35) rotate(7deg)}
+  100%{transform:scale(1) rotate(0)}
+}
+.amount{
+  margin-top:13px;
+  font-size:29px;
+  font-weight:1000;
+  color:#fff;
+  text-shadow:0 0 8px #a818e6,0 3px 4px #000;
+}
+.amount .current{color:#c63cff}
+.sparkles{
+  font-size:22px;
+  color:white;
+  text-shadow:0 0 8px #c63cff,0 0 15px #c63cff;
+  margin:0 10px;
+}
+.status{
+  position:absolute;
+  right:2px;
+  bottom:2px;
+  width:8px;height:8px;border-radius:50%;
+  background:#df4c4c;
+  opacity:.7;
+}
+.status.connected{background:#52dc6e}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title">♡ ✦ DAILY STREAM GOAL ✦ ♡</div>
+  <div class="row" id="hearts"></div>
+  <div class="amount">
+    <span class="sparkles">✦</span>
+    <span class="current" id="current">$0</span> / $100
+    <span class="sparkles">✦</span>
+  </div>
+  <div class="status" id="status" title="TikFinity connection"></div>
+</div>
+
+<script>
+const GOAL = 100;
+const STEP = 5;
+const HEARTS = 20;
+
+/*
+  IMPORTANT:
+  TikFinity supplies TikTok gift/coin information, not the creator's exact
+  cash payout. This is the on-screen conversion used by THIS widget.
+  Default: 100 counted gift coins = $1 displayed.
+*/
+const COINS_PER_DISPLAY_DOLLAR = 100;
+
+let total = 0;
+let lastGiftSignature = "";
+let lastGiftTime = 0;
+
+const dayKey = () => {
+  const d = new Date();
+  return `viviebayb-heart-goal-${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+};
+
+const saved = Number(localStorage.getItem(dayKey()));
+if (Number.isFinite(saved)) total = Math.max(0, Math.min(GOAL, saved));
+
+function save(){ localStorage.setItem(dayKey(), String(total)); }
+
+function render(oldFilled=0){
+  const filled = Math.min(HEARTS, Math.floor(total/STEP));
+  const row = document.getElementById("hearts");
+  row.innerHTML="";
+  for(let i=0;i<HEARTS;i++){
+    const h=document.createElement("span");
+    h.className="heart "+(i<filled?"filled":"empty");
+    h.textContent = i<filled ? "♥" : "♡";
+    if(i>=oldFilled && i<filled) h.classList.add("pop");
+    row.appendChild(h);
+  }
+  const shown = Math.min(total,GOAL);
+  document.getElementById("current").textContent =
+    "$"+(Number.isInteger(shown)?shown:shown.toFixed(2));
+}
+
+function addAmount(v){
+  v=Number(v);
+  if(!Number.isFinite(v)||v<=0)return;
+  const oldFilled=Math.floor(total/STEP);
+  total=Math.min(GOAL,total+v);
+  save();render(oldFilled);
+}
+window.addDonation=addAmount;
+window.setGoal=(v)=>{
+  v=Number(v);if(!Number.isFinite(v))return;
+  total=Math.max(0,Math.min(GOAL,v));save();render();
+};
+window.resetGoal=()=>{total=0;save();render();};
+
+function num(obj, paths){
+  for(const path of paths){
+    let x=obj;
+    for(const part of path.split(".")){ if(x==null)break; x=x[part]; }
+    const n=Number(x);
+    if(Number.isFinite(n))return n;
+  }
+  return null;
+}
+function text(obj, paths){
+  for(const path of paths){
+    let x=obj;
+    for(const part of path.split(".")){ if(x==null)break; x=x[part]; }
+    if(typeof x==="string" && x) return x;
+  }
+  return "";
+}
+function handleGift(d){
+  if(!d)return;
+
+  // For streak/combo gifts, wait for the completed event when TikFinity provides this flag.
+  if(d.repeatEnd===false || d.repeat_end===false) return;
+
+  let coins=num(d,[
+    "coins","coinCount","totalCoins","diamondCount",
+    "gift.coins","gift.coinCount","gift.diamondCount","gift.diamond_count"
+  ]);
+  if(!(coins>0)) return;
+
+  // If only a per-gift value is provided, account for combo count.
+  const repeat=num(d,["repeatCount","repeat_count","gift.repeatCount"]);
+  const hasTotal = ["coins","coinCount","totalCoins"].some(k=>Number.isFinite(Number(d[k])));
+  if(!hasTotal && repeat && repeat>1) coins*=repeat;
+
+  // Basic duplicate protection.
+  const giftName=text(d,["giftName","gift.name","name"]);
+  const user=text(d,["uniqueId","user.uniqueId","nickname","user.nickname"]);
+  const sig=[user,giftName,coins,repeat||1].join("|");
+  const now=Date.now();
+  if(sig===lastGiftSignature && now-lastGiftTime<500) return;
+  lastGiftSignature=sig;lastGiftTime=now;
+
+  addAmount(coins/COINS_PER_DISPLAY_DOLLAR);
+}
+
+const status=document.getElementById("status");
+let ws;
+function connect(){
+  try{
+    ws=new WebSocket("ws://127.0.0.1:21213/");
+    ws.onopen=()=>status.classList.add("connected");
+    ws.onmessage=(e)=>{
+      try{
+        const msg=JSON.parse(e.data);
+        if(msg && msg.event==="gift") handleGift(msg.data||{});
+      }catch(_){}
+    };
+    ws.onerror=()=>status.classList.remove("connected");
+    ws.onclose=()=>{
+      status.classList.remove("connected");
+      setTimeout(connect,2000);
+    };
+  }catch(_){setTimeout(connect,2000)}
+}
+render();
+connect();
+</script>
+</body>
+</html>
